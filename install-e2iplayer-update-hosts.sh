@@ -1,7 +1,7 @@
 #!/bin/sh
 ##############################################################
 # E2IPlayer Hosts Auto Updater by Mohamed Elsafty
-# Version: 3.0 (Fixed Backup Cleanup)
+# Version: 3.3 (Fixed Temp Cleanup)
 ##############################################################
 #setup command=wget -q "--no-check-certificate" https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/install-e2iplayer-update-hosts.sh -O - | /bin/sh
 ##############################################################
@@ -125,6 +125,8 @@ extract_and_compare_hosts() {
             fi
         fi
     done
+    echo "🧹 Cleaning temporary extraction folder..." | tee -a "$LOG_FILE"
+    rm -rf "$TEMP_EXTRACT"
     echo "✅ Comparison completed - $NEW_HOSTS_COUNT new host(s)" | tee -a "$LOG_FILE"
 }
 # ===========================================================
@@ -229,10 +231,29 @@ cleanup_old_backups() {
     done
 }
 # ===========================================================
+# Cleanup Temporary Files
+# ===========================================================
+cleanup_temp_files() {
+    echo "🧹 Cleaning up all temporary files..." | tee -a "$LOG_FILE"
+    find /tmp -name "e2i_extract_*" -type d -mmin +60 2>/dev/null | while read -r temp_dir; do
+        echo "  🗑️ Deleting old temp directory: $(basename "$temp_dir")" | tee -a "$LOG_FILE"
+        rm -rf "$temp_dir"
+    done
+    find /tmp -name "My_e2iplayer_hosts.tar.gz" -mmin +60 2>/dev/null | while read -r temp_file; do
+        echo "  🗑️ Deleting old temp file: $(basename "$temp_file")" | tee -a "$LOG_FILE"
+        rm -f "$temp_file"
+    done
+    find /tmp -name "e2iplayer_*" -mmin +60 2>/dev/null | while read -r temp_file; do
+        echo "  🗑️ Deleting old temp file: $(basename "$temp_file")" | tee -a "$LOG_FILE"
+        rm -f "$temp_file"
+    done
+}
+# ===========================================================
 # Main Execution
 # ===========================================================
 main() {
     echo "🕒 Started at: $(date)" | tee -a "$LOG_FILE"
+    cleanup_temp_files
     # ===========================================================
     # Download tar.gz directly
     # ===========================================================
@@ -273,6 +294,7 @@ main() {
     echo "> Performing cleanup..." | tee -a "$LOG_FILE"
     rm -f "$TAR_FILE"
     cleanup_old_backups
+    cleanup_temp_files
     sync
     # ===========================================================
     # Final report
@@ -286,7 +308,7 @@ main() {
     echo "**                 +$NEW_LIST_ENTRIES list entries" | tee -a "$LOG_FILE"
     echo "**                 +$NEW_HOSTGROUPS hostgroups" | tee -a "$LOG_FILE"
     echo "** 💾 Backups: Kept only latest backup" | tee -a "$LOG_FILE"
-    echo "** 🧹 Cleanup: Old backups removed" | tee -a "$LOG_FILE"
+    echo "** 🧹 Cleanup: All temp files and old backups removed" | tee -a "$LOG_FILE"
     echo '************************************************************'
     echo "$(date): Updated $NEW_HOSTS_COUNT hosts, +$NEW_ALIASES aliases, +$NEW_LIST_ENTRIES list, +$NEW_HOSTGROUPS groups" >> "$LOG_FILE"
     sleep 2
