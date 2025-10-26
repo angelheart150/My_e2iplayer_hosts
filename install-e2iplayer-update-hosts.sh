@@ -1,9 +1,7 @@
 #!/bin/sh
 ##############################################################
 # E2IPlayer Hosts Auto Updater by Mohamed Elsafty
-# Version: 1.2 (Final)
-# Description: Update host*.py, extract .tar.gz archives,
-# merge text files, and restart Enigma2
+# Version: 3.0 (Fixed Backup Cleanup)
 ##############################################################
 #setup command=wget -q "--no-check-certificate" https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/install-e2iplayer-update-hosts.sh -O - | /bin/sh
 ##############################################################
@@ -15,101 +13,66 @@ echo '**         Uploaded by: Mohamed Elsafty                   **'
 echo '************************************************************'
 sleep 2
 DEST_DIR="/usr/lib/enigma2/python/Plugins/Extensions/IPTVPlayer"
-TMP_DIR="/var/volatile/tmp/My_e2iplayer_hosts"
-REPO_URL="https://github.com/angelheart150/My_e2iplayer_hosts"
+HOSTS_DIR="$DEST_DIR/hosts"
+TAR_FILE="/tmp/My_e2iplayer_hosts.tar.gz"
+REPO_URL="https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/My_e2iplayer_hosts.tar.gz"
 DATE=$(date +%Y%m%d)
 LOG_FILE="/tmp/e2iplayer_update.log"
-COUNT=0
-UPDATED_FILES=""
-echo "> Removing any previous temporary folder..."
-rm -rf "$TMP_DIR"
-mkdir -p "$TMP_DIR"
-echo "> Downloading latest version from GitHub..."
-wget -q --no-check-certificate "$REPO_URL/archive/refs/heads/main.zip" -O "$TMP_DIR/main.zip"
-if [ ! -f "$TMP_DIR/main.zip" ]; then
-    echo "!! Failed to download the zip file. Check internet connection or URL."
-    exit 1
-fi
-echo "> Extracting archive..."
-unzip -q "$TMP_DIR/main.zip" -d "$TMP_DIR"
-SRC_DIR="$TMP_DIR/My_e2iplayer_hosts-main"
-# ===========================================================
-# 🧩 Extract the main tar.gz to ROOT filesystem
-# ===========================================================
-echo "> Extracting main host files to system..."
-MAIN_TAR="$SRC_DIR/My_e2iplayer_hosts.tar.gz"
-if [ -f "$MAIN_TAR" ]; then
-    echo "✓ Extracting $(basename "$MAIN_TAR") to /"
-    tar xzvpf "$MAIN_TAR" -C /
-else
-    echo "!! Main host archive not found: $MAIN_TAR"
-    exit 1
-fi
-# ===========================================================
-# 🧩 Extract any additional .tar.gz archives
-# ===========================================================
-for tarfile in "$SRC_DIR"/*.tar.gz; do
-    [ "$tarfile" = "$MAIN_TAR" ] && continue
-    [ -f "$tarfile" ] || continue
-    echo "> Extracting additional archive: $(basename "$tarfile") ..."
-    tar -xzf "$tarfile" -C "$SRC_DIR"
-done
+# Counters
+NEW_HOSTS_COUNT=0
+NEW_ALIASES=0
+NEW_LIST_ENTRIES=0
+NEW_HOSTGROUPS=0
 # ===========================================================
 # Utility Functions
 # ===========================================================
+backup_file() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        local backup="${file}.${DATE}.bak"
+        cp -f "$file" "$backup"
+        echo "📦 Backed up: $(basename "$file") → $(basename "$backup")" | tee -a "$LOG_FILE"
+    fi
+}
 normalize_file() {
     f="$1"
     [ -f "$f" ] || return
-    sed -i 's/\r$//' "$f" 2>/dev/null
-    sed -i 's/[[:space:]]\+$//' "$f" 2>/dev/null
-    sed -i '/./,$!d' "$f" 2>/dev/null
-    sed -i -e '$a\' "$f" 2>/dev/null
+    sed -i 's/\r$//' "$f"
+    sed -i 's/[[:space:]]\+$//' "$f"
+    sed -i '/./,$!d' "$f"
+    sed -i -e '$a\' "$f"
 }
 sort_list_file() {
     f="$1"
     normalize_file "$f"
-    grep -v '^[[:space:]]*$' "$f" | sort -u > "${f}.tmp" 2>/dev/null
-    [ -f "${f}.tmp" ] && mv "${f}.tmp" "$f" 2>/dev/null
-    sed -i '/^[[:space:]]*$/d' "$f" 2>/dev/null
-    sed -i '/./,$!d' "$f" 2>/dev/null
+    grep -v '^[[:space:]]*$' "$f" | sort -u > "${f}.tmp"
+    mv "${f}.tmp" "$f"
+    sed -i '/^[[:space:]]*$/d' "$f"
+    sed -i '/./,$!d' "$f"
 }
 sort_aliases_file() {
     f="$1"
     normalize_file "$f"
-    # استخدام grep و sed بدلاً من awk للمشاكل regex
-    if grep -q '^{' "$f" 2>/dev/null; then
-        temp_file="${f}.temp"
-        > "$temp_file"
-        in_block=0
-        block_content=""
-        while IFS= read -r line; do
-            if echo "$line" | grep -q '^{'; then
-                in_block=1
-                block_content=""
-                echo "$line" >> "$temp_file"
-            elif echo "$line" | grep -q '^}'; then
-                in_block=0
-                printf "%b" "$block_content" | sort >> "$temp_file"
-                echo "$line" >> "$temp_file"
-            elif [ $in_block -eq 1 ]; then
-                block_content="${block_content}${line}\n"
-            else
-                echo "$line" >> "$temp_file"
-            fi
-        done < "$f"
-        [ -f "$temp_file" ] && mv "$temp_file" "$f" 2>/dev/null
-    fi
-    normalize_file "$f"
+    awk '
+        BEGIN { inblock=0 }
+        /^\{/ { print; inblock=1; next }
+        /^\}/ { close("sort"); inblock=0; print; next }
+        inblock { print | "sort" }
+        !inblock && !/^[{}]/ { print }
+    ' "$f" > "${f}.tmp"
+    mv "${f}.tmp" "$f"
+    sed -i '/./,$!d' "$f"
 }
 sort_arabic_group() {
     f="$1"
     normalize_file "$f"
-    ln_start=$(grep -n '"arabic"' "$f" 2>/dev/null | head -n1 | cut -d: -f1)
+    ln_start=$(grep -n "\"arabic\"" "$f" | head -n1 | cut -d: -f1)
     [ -z "$ln_start" ] && return
-    ln_end=$(awk "NR>$ln_start && /^[[:space:]]*]/ {print NR; exit}" "$f" 2>/dev/null)
+    ln_end=$(awk "NR>$ln_start && /^\s*]/ {print NR; exit}" "$f")
     [ -z "$ln_end" ] && return
-    head -n "$ln_start" "$f" > "${f}.tmp" 2>/dev/null
-    entries=$(sed -n "$((ln_start+1)),$((ln_end-1))p" "$f" 2>/dev/null | sed -n 's/^[[:space:]]*"\(.*\)".*/\1/p' | sort -u)
+    head -n "$ln_start" "$f" > "${f}.tmp"
+    entries=$(sed -n "$((ln_start+1)),$((ln_end-1))p" "$f" | \
+        sed -n 's/^[[:space:]]*"\(.*\)".*/\1/p' | sort -u)
     total=$(echo "$entries" | wc -l | tr -d ' ')
     idx=0
     echo "$entries" | while IFS= read -r h; do
@@ -121,71 +84,218 @@ sort_arabic_group() {
             echo "  \"$h\"" >> "${f}.tmp"
         fi
     done
-    tail -n +"$ln_end" "$f" >> "${f}.tmp" 2>/dev/null
-    [ -f "${f}.tmp" ] && mv "${f}.tmp" "$f" 2>/dev/null
+    tail -n +"$ln_end" "$f" >> "${f}.tmp"
+    mv "${f}.tmp" "$f"
     normalize_file "$f"
     echo "✅ Arabic group sorted and cleaned." | tee -a "$LOG_FILE"
 }
 # ===========================================================
-# Backup and update host*.py (from extracted archives)
+# Extract Host Information from Python File
 # ===========================================================
-echo "> Creating backups and updating host files..."
-for file in $(find "$SRC_DIR" -name "host*.py"); do
-    [ -f "$file" ] || continue
-    filename=$(basename "$file")
-    destfile="$DEST_DIR/$filename"
-    echo "Checking for old backups of $filename..."
-    find "$DEST_DIR" -maxdepth 1 -type f -name "$filename.*.bak" ! -name "$filename.$DATE.bak" -exec rm -f {} \; 2>/dev/null
-    if [ -f "$destfile" ]; then
-        echo "Backing up $filename -> $filename.$DATE.bak"
-        cp -f "$destfile" "$destfile.$DATE.bak" 2>/dev/null
-    fi
-    echo "Installing $filename"
-    cp -f "$file" "$DEST_DIR/" 2>/dev/null
-    if [ $? -eq 0 ]; then
-        UPDATED_FILES="$UPDATED_FILES $filename"
-        COUNT=$((COUNT+1))
-        echo "✓ Successfully installed $filename"
-    else
-        echo "✗ Failed to install $filename"
-    fi
-done
-# ===========================================================
-# Merge text files (append new unique lines only)
-# ===========================================================
-merge_text_file() {
-    src="$1"
-    dst="$2"
-    [ -f "$src" ] || { echo "Source file $src not found"; return; }
-    [ -f "$dst" ] || { echo "Creating $dst"; touch "$dst"; }
-    normalize_file "$src"
-    normalize_file "$dst"
-    new_entries=$(grep -Fxvf "$dst" "$src" 2>/dev/null | wc -l)
-    grep -Fxvf "$dst" "$src" >> "$dst" 2>/dev/null
-    echo "Merged $new_entries new entries into $(basename "$dst")"
+extract_host_info() {
+    local host_file="$1"
+    local host_info=""
+    local host_name=$(basename "$host_file" .py)
+    local host_url=$(grep "def gettytul()" "$host_file" -A 1 | grep "return" | head -1 | sed "s/.*return[[:space:]]*['\"]\([^'\"]*\)['\"].*/\1/")
+    echo "$host_name|$host_url"
 }
-echo "> Merging and sorting text files..."
-[ -f "$SRC_DIR/aliases.txt" ] && merge_text_file "$SRC_DIR/aliases.txt" "$DEST_DIR/hosts/aliases.txt"
-[ -f "$SRC_DIR/hostgroups.txt" ] && merge_text_file "$SRC_DIR/hostgroups.txt" "$DEST_DIR/hosts/hostgroups.txt"
-[ -f "$SRC_DIR/list.txt" ] && merge_text_file "$SRC_DIR/list.txt" "$DEST_DIR/hosts/list.txt"
-[ -f "$DEST_DIR/hosts/aliases.txt" ] && sort_aliases_file "$DEST_DIR/hosts/aliases.txt"
-[ -f "$DEST_DIR/hosts/hostgroups.txt" ] && sort_arabic_group "$DEST_DIR/hosts/hostgroups.txt"
-[ -f "$DEST_DIR/hosts/list.txt" ] && sort_list_file "$DEST_DIR/hosts/list.txt"
 # ===========================================================
-# Cleanup
+# Extract and Compare Host Files
 # ===========================================================
-rm -rf "$TMP_DIR"
-sync
-echo '************************************************************'
-echo "** INSTALLATION DONE - $COUNT host file(s) updated **"
-echo '************************************************************'
-echo "$(date): Updated $COUNT file(s)" >> "$LOG_FILE"
-if [ $COUNT -gt 0 ]; then
-    echo "Updated files:$UPDATED_FILES"
-else
-    echo "No additional host files were updated from archives!"
-fi
-sleep 2
-echo "Restarting Enigma2..."
-killall -9 enigma2
-exit 0
+extract_and_compare_hosts() {
+    echo "🔍 Extracting and comparing host files..." | tee -a "$LOG_FILE"
+    TEMP_EXTRACT="/tmp/e2i_extract_$$"
+    mkdir -p "$TEMP_EXTRACT"
+    tar xzpf "$TAR_FILE" -C "$TEMP_EXTRACT" >/dev/null 2>&1
+    NEW_HOSTS=""
+    for host_file in "$TEMP_EXTRACT"/usr/lib/enigma2/python/Plugins/Extensions/IPTVPlayer/hosts/host*.py; do
+        [ -f "$host_file" ] || continue
+        filename=$(basename "$host_file")
+        dest_file="$HOSTS_DIR/$filename"
+        if [ ! -f "$dest_file" ]; then
+            NEW_HOSTS="$NEW_HOSTS $host_file"
+            NEW_HOSTS_COUNT=$((NEW_HOSTS_COUNT + 1))
+            echo "🆕 New host found: $filename" | tee -a "$LOG_FILE"
+        else
+            if ! cmp -s "$host_file" "$dest_file"; then
+                backup_file "$dest_file"
+                echo "🔄 Updating modified: $filename" | tee -a "$LOG_FILE"
+            else
+                echo "ℹ️  No changes: $filename" | tee -a "$LOG_FILE"
+            fi
+        fi
+    done
+    echo "✅ Comparison completed - $NEW_HOSTS_COUNT new host(s)" | tee -a "$LOG_FILE"
+}
+# ===========================================================
+# Update Text Files
+# ===========================================================
+update_aliases_file() {
+    echo "📝 Updating aliases.txt..." | tee -a "$LOG_FILE"
+    ALIASES_FILE="$HOSTS_DIR/aliases.txt"
+    backup_file "$ALIASES_FILE"
+    for host_file in $NEW_HOSTS; do
+        [ ! -f "$host_file" ] && continue
+        host_info=$(extract_host_info "$host_file")
+        host_name=$(echo "$host_info" | cut -d'|' -f1)
+        host_url=$(echo "$host_info" | cut -d'|' -f2)
+        [ -z "$host_name" ] && continue
+        formatted="'$host_name': '$host_url',"
+        if ! grep -q "'$host_name':" "$ALIASES_FILE"; then
+            sed -i "/^{/a $formatted" "$ALIASES_FILE"
+            echo "➕ Added alias: $formatted" | tee -a "$LOG_FILE"
+            NEW_ALIASES=$((NEW_ALIASES + 1))
+        else
+            echo "ℹ️  Alias for $host_name already exists" | tee -a "$LOG_FILE"
+        fi
+    done
+    sort_aliases_file "$ALIASES_FILE"
+    echo "✅ aliases.txt updated." | tee -a "$LOG_FILE"
+}
+update_list_file() {
+    echo "📝 Updating list.txt..." | tee -a "$LOG_FILE"
+    LIST_FILE="$HOSTS_DIR/list.txt"
+    backup_file "$LIST_FILE"
+    normalize_file "$LIST_FILE"
+    for host_file in $NEW_HOSTS; do
+        [ ! -f "$host_file" ] && continue
+        host_name=$(basename "$host_file" .py)
+        clean_host=$(echo "$host_name" | tr -d '\r' | xargs)
+        [ -z "$clean_host" ] && continue
+        if grep -xqF "$clean_host" "$LIST_FILE"; then
+            echo "ℹ️  $clean_host already exists in list.txt — skipping" | tee -a "$LOG_FILE"
+        else
+            echo "$clean_host" >> "$LIST_FILE"
+            echo "➕ Added $clean_host to list.txt" | tee -a "$LOG_FILE"
+            NEW_LIST_ENTRIES=$((NEW_LIST_ENTRIES + 1))
+        fi
+    done
+    sort_list_file "$LIST_FILE"
+    echo "✅ list.txt updated safely (sorted)." | tee -a "$LOG_FILE"
+}
+update_hostgroups_file() {
+    echo "📝 Updating Arabic section in hostgroups.txt..." | tee -a "$LOG_FILE"
+    GROUPS_FILE="$HOSTS_DIR/hostgroups.txt"
+    if [ -f "$GROUPS_FILE" ]; then
+        backup_file "$GROUPS_FILE"
+        for host_file in $NEW_HOSTS; do
+            [ ! -f "$host_file" ] && continue
+            full_name=$(basename "$host_file" .py)
+            short_name=$(echo "$full_name" | sed 's/^host//')
+            [ -z "$short_name" ] && continue
+            if ! grep -q "\"$short_name\"" "$GROUPS_FILE"; then
+                sed -i "/\"arabic\"[[:space:]]*:[[:space:]]*\[/a\  \"$short_name\"," "$GROUPS_FILE"
+                echo "➕ Inserted \"$short_name\" under Arabic category" | tee -a "$LOG_FILE"
+                NEW_HOSTGROUPS=$((NEW_HOSTGROUPS + 1))
+            else
+                echo "ℹ️  \"$short_name\" already exists in Arabic section" | tee -a "$LOG_FILE"
+            fi
+        done
+        sort_arabic_group "$GROUPS_FILE"
+        echo "✅ hostgroups.txt updated and sorted (Arabic section)." | tee -a "$LOG_FILE"
+    else
+        echo "⚠️  hostgroups.txt not found at: $GROUPS_FILE" | tee -a "$LOG_FILE"
+    fi
+}
+# ===========================================================
+# Cleanup Old Backups - Keep only latest backup
+# ===========================================================
+cleanup_old_backups() {
+    echo "🧹 Cleaning up old backups (keeping only latest)..." | tee -a "$LOG_FILE"
+    FILE_TYPES="aliases.txt list.txt hostgroups.txt hostlodynet.py"
+    for file_type in $FILE_TYPES; do
+        backups=$(find "$DEST_DIR" -name "$file_type.*.bak" | sort -r)
+        backup_count=$(echo "$backups" | wc -l)
+        if [ "$backup_count" -gt 1 ]; then
+            echo "🔍 Found $backup_count backups for $file_type" | tee -a "$LOG_FILE"
+            latest_backup=$(echo "$backups" | head -1)
+            echo "💾 Keeping latest: $(basename "$latest_backup")" | tee -a "$LOG_FILE"
+            echo "$backups" | tail -n +2 | while read -r old_backup; do
+                if [ -f "$old_backup" ]; then
+                    echo "  🗑️ Deleting: $(basename "$old_backup")" | tee -a "$LOG_FILE"
+                    rm -f "$old_backup"
+                fi
+            done
+        elif [ "$backup_count" -eq 1 ]; then
+            echo "ℹ️  Only one backup found for $file_type - keeping it" | tee -a "$LOG_FILE"
+        else
+            echo "ℹ️  No backups found for $file_type" | tee -a "$LOG_FILE"
+        fi
+    done
+    echo "🧹 Cleaning other old backups..." | tee -a "$LOG_FILE"
+    find "$DEST_DIR" -name "*.bak" -mtime +7 | while read -r old_backup; do
+        echo "  🗑️ Deleting old backup: $(basename "$old_backup")" | tee -a "$LOG_FILE"
+        rm -f "$old_backup"
+    done
+}
+# ===========================================================
+# Main Execution
+# ===========================================================
+main() {
+    echo "🕒 Started at: $(date)" | tee -a "$LOG_FILE"
+    # ===========================================================
+    # Download tar.gz directly
+    # ===========================================================
+    echo "> Downloading hosts archive directly..."
+    wget -q --no-check-certificate "$REPO_URL" -O "$TAR_FILE"
+    if [ ! -f "$TAR_FILE" ]; then
+        echo "!! Failed to download the tar file. Check internet connection or URL." | tee -a "$LOG_FILE"
+        exit 1
+    fi
+    echo "✅ Download completed: $(ls -lh "$TAR_FILE" | awk '{print $5}')" | tee -a "$LOG_FILE"
+    # ===========================================================
+    # Compare and extract
+    # ===========================================================
+    extract_and_compare_hosts
+    # ===========================================================
+    # Extract to system
+    # ===========================================================
+    echo "> Extracting to system..." | tee -a "$LOG_FILE"
+    tar xzpf "$TAR_FILE" -C / >/dev/null 2>&1
+    echo "✅ Extraction completed" | tee -a "$LOG_FILE"
+    # ===========================================================
+    # Update text files if there are new hosts
+    # ===========================================================
+    if [ $NEW_HOSTS_COUNT -gt 0 ]; then
+        echo ""
+        echo "> Updating text files with new hosts..." | tee -a "$LOG_FILE"
+        update_aliases_file
+        update_list_file
+        update_hostgroups_file
+    else
+        echo ""
+        echo "ℹ️  No new hosts found - skipping text file updates" | tee -a "$LOG_FILE"
+    fi
+    # ===========================================================
+    # Cleanup
+    # ===========================================================
+    echo ""
+    echo "> Performing cleanup..." | tee -a "$LOG_FILE"
+    rm -f "$TAR_FILE"
+    cleanup_old_backups
+    sync
+    # ===========================================================
+    # Final report
+    # ===========================================================
+    echo ""
+    echo '************************************************************'
+    echo "**               UPDATE COMPLETED SUCCESSFULLY           **"
+    echo '************************************************************'
+    echo "** 📦 New Host Files: $NEW_HOSTS_COUNT" | tee -a "$LOG_FILE"
+    echo "** 📝 Text Updates: +$NEW_ALIASES aliases" | tee -a "$LOG_FILE"
+    echo "**                 +$NEW_LIST_ENTRIES list entries" | tee -a "$LOG_FILE"
+    echo "**                 +$NEW_HOSTGROUPS hostgroups" | tee -a "$LOG_FILE"
+    echo "** 💾 Backups: Kept only latest backup" | tee -a "$LOG_FILE"
+    echo "** 🧹 Cleanup: Old backups removed" | tee -a "$LOG_FILE"
+    echo '************************************************************'
+    echo "$(date): Updated $NEW_HOSTS_COUNT hosts, +$NEW_ALIASES aliases, +$NEW_LIST_ENTRIES list, +$NEW_HOSTGROUPS groups" >> "$LOG_FILE"
+    sleep 2
+    echo ""
+    echo "🔄 Restarting Enigma2..." | tee -a "$LOG_FILE"
+    killall -9 enigma2
+    exit 0
+}
+# ===========================================================
+# Script Entry Point
+# ===========================================================
+main
