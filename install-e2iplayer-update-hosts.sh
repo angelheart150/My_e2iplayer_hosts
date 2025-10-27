@@ -153,13 +153,21 @@ show_oe_mirrors_instructions() {
     echo ""
     echo "🔘 اضغط 1 لتنفيذ الأمر الآن ثم نفذ التشعيل لتثبيت الاضافات أو 2 للخروج."
     echo "🔘 Press 1 to execute the installation now and restart to finish, or 2 to exit."
-    read -n1 choice
+    read -n1 choice < /dev/tty
     echo ""
     if [ "$choice" = "1" ]; then
         echo "✅ جاري تثبيت النسخة الرسمية OE-MIRRORS..."
         echo "✅ Installing the official OE-MIRRORS version..."
         wget --no-check-certificate "https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip" -O /tmp/e2iplayer-python3.zip
-        unzip /tmp/e2iplayer-python3.zip -d /tmp/
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to download file"
+            exit 1
+        fi
+        unzip -o /tmp/e2iplayer-python3.zip -d /tmp/
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to extract file"
+            exit 1
+        fi
         cp -rf /tmp/e2iplayer-python3/IPTVPlayer /usr/lib/enigma2/python/Plugins/Extensions
         rm -f /tmp/e2iplayer-python3.zip
         rm -fr /tmp/e2iplayer-python3
