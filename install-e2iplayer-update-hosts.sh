@@ -1,9 +1,7 @@
 #!/bin/sh
 ##############################################################
 # E2IPlayer Hosts Auto Updater by Mohamed Elsafty
-# Version: 3.6 (Optimized Timing)
-# Description: Direct download and smart update of E2IPlayer hosts
-# Features: Auto backup, text file merging, cleanup, and validation
+# Version: 4.2 (With Plugin Installation Check and user choise)
 ##############################################################
 #setup command=wget -q "--no-check-certificate" https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/install-e2iplayer-update-hosts.sh -O - | /bin/sh
 ##############################################################
@@ -29,9 +27,154 @@ NEW_ALIASES=0
 NEW_LIST_ENTRIES=0
 NEW_HOSTGROUPS=0
 # ===========================================================
-# Utility Functions
+# Check Plugin Installation
 # ===========================================================
-# Backup file with date stamp
+check_plugin_installation() {
+    echo "🔍 Checking E2iPlayer plugin installation..." | tee -a "$LOG_FILE"
+    if [ ! -d "$DEST_DIR" ]; then
+        echo "❌ E2iPlayer plugin is not installed!" | tee -a "$LOG_FILE"
+        echo "   Directory not found: $DEST_DIR" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        echo "📦 Please install E2iPlayer first using one of these methods:" | tee -a "$LOG_FILE"
+        echo "=========================================" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        echo "🔹 Method 1: Install from plugin repository" | tee -a "$LOG_FILE"
+        echo "   - Go to Enigma2 menu" | tee -a "$LOG_FILE"
+        echo "   - Plugins → Download plugins" | tee -a "$LOG_FILE"
+        echo "   - Find and install IPTVPlayer" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        echo "🔹 Method 2: Manual installation (OE-MIRRORS version)" | tee -a "$LOG_FILE"
+        echo "   Run this command:" | tee -a "$LOG_FILE"
+        echo "   -----------------------------------------" | tee -a "$LOG_FILE"
+        echo "   wget --no-check-certificate \\" | tee -a "$LOG_FILE"
+        echo "   \"https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip\" \\" | tee -a "$LOG_FILE"
+        echo "   -O /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
+        echo "   unzip /tmp/e2iplayer-python3.zip -d /tmp/ && \\" | tee -a "$LOG_FILE"
+        echo "   cp -rf /tmp/e2iplayer-python3/IPTVPlayer \\" | tee -a "$LOG_FILE"
+        echo "   /usr/lib/enigma2/python/Plugins/Extensions && \\" | tee -a "$LOG_FILE"
+        echo "   rm -f /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
+        echo "   rm -fr /tmp/e2iplayer-python3" | tee -a "$LOG_FILE"
+        echo "   -----------------------------------------" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        echo "🔹 Method 3: For OpenPLi images" | tee -a "$LOG_FILE"
+        echo "   opkg update && opkg install enigma2-plugin-extensions-iptvplayer" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        echo "After installation, run this script again." | tee -a "$LOG_FILE"
+        echo "=========================================" | tee -a "$LOG_FILE"
+        return 1
+    fi
+    # Check if basic plugin structure exists
+    if [ ! -f "$DEST_DIR/__init__.py" ] && [ ! -f "$DEST_DIR/version.py" ]; then
+        echo "⚠️  E2iPlayer directory exists but seems incomplete" | tee -a "$LOG_FILE"
+        echo "   Missing essential files in: $DEST_DIR" | tee -a "$LOG_FILE"
+        echo "   The plugin may not be installed correctly." | tee -a "$LOG_FILE"
+        return 1
+    fi
+    echo "✅ E2iPlayer plugin is installed" | tee -a "$LOG_FILE"
+    return 0
+}
+# ===========================================================
+# Detect Installed E2iPlayer Version and Team
+# ===========================================================
+detect_e2iplayer_version() {
+    echo "🔍 Detecting installed E2iPlayer version..." | tee -a "$LOG_FILE"
+    PLUGIN_PATH="/usr/lib/enigma2/python/Plugins/Extensions/IPTVPlayer"
+    VERSION_FILE="$PLUGIN_PATH/version.py"
+    if [ ! -f "$VERSION_FILE" ]; then
+        echo "❌ E2iPlayer version.py not found at:" | tee -a "$LOG_FILE"
+        echo "   $PLUGIN_PATH" | tee -a "$LOG_FILE"
+        echo "   E2iPlayer may not be installed correctly." | tee -a "$LOG_FILE"
+        return 1
+    fi
+    # Extract version
+    VERSION=$(grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}' "$VERSION_FILE" 2>/dev/null | head -1)
+    if [ -z "$VERSION" ]; then
+        VERSION="Unknown"
+    fi
+    # Detect team based on code references
+    if grep -r "oe-mirrors/e2iplayer" "$PLUGIN_PATH" >/dev/null 2>&1; then
+        TEAM="OE-MIRRORS"
+        LINK="https://github.com/oe-mirrors/e2iplayer"
+        IS_OE_MIRRORS=1
+    elif grep -r "zadmario" "$PLUGIN_PATH" >/dev/null 2>&1; then
+        TEAM="ZADMARIO" 
+        LINK="https://gitlab.com/zadmario/e2iplayer"
+        IS_OE_MIRRORS=0
+    elif grep -r "maxbambi" "$PLUGIN_PATH" >/dev/null 2>&1; then
+        TEAM="MAXBAMBI"
+        LINK="https://gitlab.com/maxbambi/e2iplayer"
+        IS_OE_MIRRORS=0
+    elif grep -r "Blindspot76" "$PLUGIN_PATH" >/dev/null 2>&1; then
+        TEAM="BLINDSPOT76"
+        LINK="https://github.com/Blindspot76/e2iPlayer"
+        IS_OE_MIRRORS=0
+    elif grep -r "Belfagor2005" "$PLUGIN_PATH" >/dev/null 2>&1; then
+        TEAM="BELFAGOR2005"
+        LINK="https://github.com/Belfagor2005/e2player"
+        IS_OE_MIRRORS=0
+    else
+        TEAM="Unknown (Custom/Modified)"
+        LINK="Not available"
+        IS_OE_MIRRORS=0
+    fi
+    # Display detection results
+    echo "=========================================" | tee -a "$LOG_FILE"
+    echo "📺 E2iPlayer / IPTVPlayer Information" | tee -a "$LOG_FILE"
+    echo "-----------------------------------------" | tee -a "$LOG_FILE"
+    echo "🔸 Installed Version: $VERSION" | tee -a "$LOG_FILE"
+    echo "🔹 Development Team:  $TEAM" | tee -a "$LOG_FILE"
+    echo "🔗 Project Link:      $LINK" | tee -a "$LOG_FILE"
+    echo "=========================================" | tee -a "$LOG_FILE"
+    return $IS_OE_MIRRORS
+}
+# ===========================================================
+# Show OE-MIRRORS Installation Instructions
+# ===========================================================
+show_oe_mirrors_instructions() {
+    echo "" | tee -a "$LOG_FILE"
+    echo "❌ INCOMPATIBLE VERSION DETECTED" | tee -a "$LOG_FILE"
+    echo "=========================================" | tee -a "$LOG_FILE"
+    echo "This hosts update is designed specifically for" | tee -a "$LOG_FILE"
+    echo "OE-MIRRORS E2iPlayer version only." | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    echo "Your current version: $TEAM" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    echo "To install OE-MIRRORS version manually, run this command:" | tee -a "$LOG_FILE"
+    echo "-------------------------------------------------" | tee -a "$LOG_FILE"
+    echo "wget --no-check-certificate \\" | tee -a "$LOG_FILE"
+    echo "\"https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip\" \\" | tee -a "$LOG_FILE"
+    echo "-O /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
+    echo "unzip /tmp/e2iplayer-python3.zip -d /tmp/ && \\" | tee -a "$LOG_FILE"
+    echo "cp -rf /tmp/e2iplayer-python3/IPTVPlayer \\" | tee -a "$LOG_FILE"
+    echo "/usr/lib/enigma2/python/Plugins/Extensions && \\" | tee -a "$LOG_FILE"
+    echo "rm -f /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
+    echo "rm -fr /tmp/e2iplayer-python3" | tee -a "$LOG_FILE"
+    echo "-------------------------------------------------" | tee -a "$LOG_FILE"
+    echo ""
+    echo "🔘 اضغط 1 لتنفيذ الأمر الآن ثم نفذ التشعيل لتثبيت الاضافات أو 2 للخروج."
+    echo "🔘 Press 1 to execute the installation now and restart to finish, or 2 to exit."
+    read -n1 choice
+    echo ""
+    if [ "$choice" = "1" ]; then
+        echo "✅ جاري تثبيت النسخة الرسمية OE-MIRRORS..."
+        echo "✅ Installing the official OE-MIRRORS version..."
+        wget --no-check-certificate "https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip" -O /tmp/e2iplayer-python3.zip
+        unzip /tmp/e2iplayer-python3.zip -d /tmp/
+        cp -rf /tmp/e2iplayer-python3/IPTVPlayer /usr/lib/enigma2/python/Plugins/Extensions
+        rm -f /tmp/e2iplayer-python3.zip
+        rm -fr /tmp/e2iplayer-python3
+        echo "✅ تم تثبيت النسخة بنجاح، أعد تشغيل Enigma2."
+        echo "✅ Installation completed successfully. Restarting Enigma2."
+        sleep 3
+        killall -9 enigma2
+    else
+        echo "❌ Operation cancelled تم الإلغاء."
+        exit 1
+    fi
+}
+# ===========================================================
+# Utility Functions (Keep existing ones)
+# ===========================================================
 backup_file() {
     local file="$1"
     if [ -f "$file" ]; then
@@ -40,7 +183,6 @@ backup_file() {
         echo "📦 Backed up: $(basename "$file") → $(basename "$backup")" | tee -a "$LOG_FILE"
     fi
 }
-# Normalize file formatting (CRLF to LF, trim spaces, ensure newline)
 normalize_file() {
     f="$1"
     [ -f "$f" ] || return
@@ -49,7 +191,6 @@ normalize_file() {
     sed -i '/./,$!d' "$f"
     sed -i -e '$a\' "$f"
 }
-# Sort list file alphabetically and remove duplicates
 sort_list_file() {
     f="$1"
     normalize_file "$f"
@@ -58,7 +199,6 @@ sort_list_file() {
     sed -i '/^[[:space:]]*$/d' "$f"
     sed -i '/./,$!d' "$f"
 }
-# Sort aliases file while preserving dictionary structure
 sort_aliases_file() {
     f="$1"
     normalize_file "$f"
@@ -72,7 +212,6 @@ sort_aliases_file() {
     mv "${f}.tmp" "$f"
     sed -i '/./,$!d' "$f"
 }
-# Sort Arabic group in hostgroups file alphabetically
 sort_arabic_group() {
     f="$1"
     normalize_file "$f"
@@ -102,7 +241,6 @@ sort_arabic_group() {
 # ===========================================================
 # Extract Host Information from Python File
 # ===========================================================
-# Extract host name and URL from Python host file
 extract_host_info() {
     local host_file="$1"
     local host_info=""
@@ -119,7 +257,6 @@ extract_host_info() {
 # ===========================================================
 # Check if host needs to be added to text files
 # ===========================================================
-# Verify if host exists in all text files
 check_host_in_text_files() {
     local host_name="$1"
     local short_name="$2"
@@ -140,7 +277,6 @@ check_host_in_text_files() {
 # ===========================================================
 # Extract and Compare Host Files
 # ===========================================================
-# Extract archive and compare with existing files
 extract_and_compare_hosts() {
     echo "🔍 Extracting and comparing host files..." | tee -a "$LOG_FILE"
     # Extract archive to temporary directory for comparison
@@ -189,7 +325,6 @@ extract_and_compare_hosts() {
 # ===========================================================
 # Update Text Files
 # ===========================================================
-# Update aliases.txt with new host entries
 update_aliases_file() {
     echo "📝 Updating aliases.txt..." | tee -a "$LOG_FILE"
     ALIASES_FILE="$HOSTS_DIR/aliases.txt"
@@ -213,7 +348,6 @@ update_aliases_file() {
     sort_aliases_file "$ALIASES_FILE"
     echo "✅ aliases.txt updated." | tee -a "$LOG_FILE"
 }
-# Update list.txt with new host entries
 update_list_file() {
     echo "📝 Updating list.txt..." | tee -a "$LOG_FILE"
     LIST_FILE="$HOSTS_DIR/list.txt"
@@ -240,7 +374,6 @@ update_list_file() {
     sort_list_file "$LIST_FILE"
     echo "✅ list.txt updated safely (sorted)." | tee -a "$LOG_FILE"
 }
-# Update Arabic section in hostgroups.txt
 update_hostgroups_file() {
     echo "📝 Updating Arabic section in hostgroups.txt..." | tee -a "$LOG_FILE"
     GROUPS_FILE="$HOSTS_DIR/hostgroups.txt"
@@ -274,7 +407,6 @@ update_hostgroups_file() {
 # ===========================================================
 # Cleanup Temporary Files
 # ===========================================================
-# Clean up all temporary files and directories
 cleanup_temp_files() {
     echo "🧹 Cleaning up all temporary files..." | tee -a "$LOG_FILE"
     # Clean current script temporary files
@@ -292,6 +424,29 @@ cleanup_temp_files() {
 # ===========================================================
 main() {
     echo "🕒 Started at: $(date)" | tee -a "$LOG_FILE"
+    # ===========================================================
+    # Check if E2iPlayer plugin is installed
+    # ===========================================================
+    if ! check_plugin_installation; then
+        exit 1
+    fi
+    sleep 0.5
+    # ===========================================================
+    # Detect E2iPlayer version and check compatibility
+    # ===========================================================
+	# if detect_e2iplayer_version; then
+		# show_oe_mirrors_instructions
+		# exit 1
+	# fi
+	detect_e2iplayer_version
+	IS_OE_MIRRORS=$?
+
+	if [ $IS_OE_MIRRORS -eq 0 ]; then
+		show_oe_mirrors_instructions
+		exit 1
+	fi
+    echo "✅ Compatible version detected: $TEAM" | tee -a "$LOG_FILE"
+    sleep 1
     # Clean old temporary files before starting
     cleanup_temp_files
     # ===========================================================
