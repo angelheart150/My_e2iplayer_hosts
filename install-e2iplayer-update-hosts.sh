@@ -1,7 +1,7 @@
 #!/bin/sh
 ##############################################################
 # E2IPlayer Hosts Auto Updater by Mohamed Elsafty
-# Version: 4.2 (With Plugin Installation Check and user choise)
+# Version: 4.3 (With Plugin Installation Check and user choise)
 ##############################################################
 #setup command=wget -q "--no-check-certificate" https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/install-e2iplayer-update-hosts.sh -O - | /bin/sh
 ##############################################################
@@ -59,9 +59,42 @@ check_plugin_installation() {
         echo "🔹 Method 3: For OpenPLi images" | tee -a "$LOG_FILE"
         echo "   opkg update && opkg install enigma2-plugin-extensions-iptvplayer" | tee -a "$LOG_FILE"
         echo "" | tee -a "$LOG_FILE"
-        echo "After installation, run this script again." | tee -a "$LOG_FILE"
-        echo "=========================================" | tee -a "$LOG_FILE"
-        return 1
+        # إضافة خيار التثبيت التلقائي
+        echo "🔘 اضغط 1 للتثبيت التلقائي الآن أو 2 للخروج."
+        echo "🔘 Press 1 for auto-installation now or 2 to exit."
+        # التحقق مما إذا كان التشغيل تفاعلياً
+        if [ -t 0 ]; then
+            # التشغيل التفاعلي
+            read -n1 choice < /dev/tty
+            echo ""
+        else
+            # التشغيل عبر pipe - التثبيت التلقائي
+            echo "⚠️  Auto-installing OE-MIRRORS version..."
+            choice="1"
+        fi
+        if [ "$choice" = "1" ]; then
+            echo "✅ جاري تثبيت النسخة الرسمية OE-MIRRORS..."
+            echo "✅ Installing the official OE-MIRRORS version..."
+            wget --no-check-certificate "https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip" -O /tmp/e2iplayer-python3.zip
+            if [ $? -ne 0 ]; then
+                echo "❌ Failed to download file"
+                exit 1
+            fi
+            unzip -o /tmp/e2iplayer-python3.zip -d /tmp/
+            if [ $? -ne 0 ]; then
+                echo "❌ Failed to extract file"
+                exit 1
+            fi
+            cp -rf /tmp/e2iplayer-python3/IPTVPlayer /usr/lib/enigma2/python/Plugins/Extensions
+            rm -f /tmp/e2iplayer-python3.zip
+            rm -fr /tmp/e2iplayer-python3
+            echo "✅ تم تثبيت الإضافة بنجاح، جاري متابعة تحديث الـ Hosts..."
+            echo "✅ Plugin installed successfully, continuing with hosts update..."
+            return 0
+        else
+            echo "❌ Operation cancelled تم الإلغاء."
+            exit 1
+        fi
     fi
     # Check if basic plugin structure exists
     if [ ! -f "$DEST_DIR/__init__.py" ] && [ ! -f "$DEST_DIR/version.py" ]; then
@@ -448,7 +481,6 @@ main() {
 	# fi
 	detect_e2iplayer_version
 	IS_OE_MIRRORS=$?
-
 	if [ $IS_OE_MIRRORS -eq 0 ]; then
 		show_oe_mirrors_instructions
 		exit 1
