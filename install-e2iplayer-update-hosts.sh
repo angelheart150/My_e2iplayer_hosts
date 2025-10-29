@@ -59,16 +59,16 @@ check_plugin_installation() {
         echo "🔹 Method 3: For OpenPLi images" | tee -a "$LOG_FILE"
         echo "   opkg update && opkg install enigma2-plugin-extensions-iptvplayer" | tee -a "$LOG_FILE"
         echo "" | tee -a "$LOG_FILE"
-        # إضافة خيار التثبيت التلقائي
+        # Add auto-installation option
         echo "🔘 اضغط 1 للتثبيت التلقائي الآن أو 2 للخروج."
         echo "🔘 Press 1 for auto-installation now or 2 to exit."
-        # التحقق مما إذا كان التشغيل تفاعلياً
+        # Check if the script is running interactively
         if [ -t 0 ]; then
-            # التشغيل التفاعلي
+            # Interactive mode
             read -n1 choice < /dev/tty
             echo ""
         else
-            # التشغيل عبر pipe - التثبيت التلقائي
+            # Running via pipe - perform automatic installation
             echo "⚠️  Auto-installing OE-MIRRORS version..."
             choice="1"
         fi
