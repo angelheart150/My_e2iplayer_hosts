@@ -1,7 +1,7 @@
 #!/bin/sh
 ##############################################################
 # E2IPlayer Hosts Auto Updater by Mohamed Elsafty
-# Version: 4.3 (With Plugin Installation Check and user choise)
+# Version: 4.5 (With TSiPlayer Installation and Hosts Update)
 ##############################################################
 #setup command=wget -q "--no-check-certificate" https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/install-e2iplayer-update-hosts.sh -O - | /bin/sh
 ##############################################################
@@ -17,8 +17,13 @@ sleep 1
 # ===========================================================
 DEST_DIR="/usr/lib/enigma2/python/Plugins/Extensions/IPTVPlayer"
 HOSTS_DIR="$DEST_DIR/hosts"
+TSI_DEST_DIR="/usr/lib/enigma2/python/Plugins/Extensions/IPTVPlayer/tsiplayer"
 TAR_FILE="/tmp/My_e2iplayer_hosts.tar.gz"
+TSI_TAR_FILE="/tmp/Tsiplayer.tar.gz"
 REPO_URL="https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/My_e2iplayer_hosts.tar.gz"
+TSI_REPO_URL="https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/Tsiplayer.tar.gz"
+TSI_HOSTS_REPO_URL="https://github.com/angelheart150/My-tsiplayer/archive/refs/heads/main.zip"
+TSI_TMP_DIR="/var/volatile/tmp/mytsiplayer"
 DATE=$(date +%Y%m%d)
 LOG_FILE="/tmp/e2iplayer_update.log"
 # Counters for tracking updates
@@ -26,6 +31,7 @@ NEW_HOSTS_COUNT=0
 NEW_ALIASES=0
 NEW_LIST_ENTRIES=0
 NEW_HOSTGROUPS=0
+TSI_UPDATED_COUNT=0
 # ===========================================================
 # Check Plugin Installation
 # ===========================================================
@@ -104,6 +110,119 @@ check_plugin_installation() {
         return 1
     fi
     echo "✅ E2iPlayer plugin is installed" | tee -a "$LOG_FILE"
+    return 0
+}
+# ===========================================================
+# Install TSiPlayer Host
+# ===========================================================
+install_tsiplayer() {
+    echo ""
+    echo "🔧 Installing TSiPlayer host..." | tee -a "$LOG_FILE"
+    # Download TSiPlayer tar.gz
+    echo "📥 Downloading TSiPlayer archive..."
+    wget -q --no-check-certificate "$TSI_REPO_URL" -O "$TSI_TAR_FILE"
+    if [ ! -f "$TSI_TAR_FILE" ]; then
+        echo "❌ Failed to download TSiPlayer tar file." | tee -a "$LOG_FILE"
+        return 1
+    fi
+    echo "✅ TSiPlayer download completed: $(ls -lh "$TSI_TAR_FILE" | awk '{print $5}')" | tee -a "$LOG_FILE"
+    # Extract TSiPlayer to system
+    echo "📦 Extracting TSiPlayer to system..." | tee -a "$LOG_FILE"
+    tar xzpf "$TSI_TAR_FILE" -C / >/dev/null 2>&1
+    echo "✅ TSiPlayer extraction completed" | tee -a "$LOG_FILE"
+    # Update hostgroups.txt - add tsiplayer to Arabic section
+    echo "📝 Updating hostgroups.txt for TSiPlayer..." | tee -a "$LOG_FILE"
+    GROUPS_FILE="$HOSTS_DIR/hostgroups.txt"
+    if [ -f "$GROUPS_FILE" ]; then
+        backup_file "$GROUPS_FILE"
+        # Check if tsiplayer already exists in Arabic section
+        if ! grep -q '"tsiplayer"' "$GROUPS_FILE"; then
+            # Add tsiplayer as first entry in Arabic section
+            sed -i '/"arabic"[[:space:]]*:[[:space:]]*\[/a\  "tsiplayer",' "$GROUPS_FILE"
+            echo "➕ Added \"tsiplayer\" to Arabic section in hostgroups.txt" | tee -a "$LOG_FILE"
+        else
+            echo "ℹ️  \"tsiplayer\" already exists in Arabic section" | tee -a "$LOG_FILE"
+        fi
+        # Sort Arabic group
+        sort_arabic_group "$GROUPS_FILE"
+        echo "✅ hostgroups.txt updated for TSiPlayer" | tee -a "$LOG_FILE"
+    else
+        echo "⚠️  hostgroups.txt not found" | tee -a "$LOG_FILE"
+    fi
+    # Update list.txt - add hosttsiplayer
+    echo "📝 Updating list.txt for TSiPlayer..." | tee -a "$LOG_FILE"
+    LIST_FILE="$HOSTS_DIR/list.txt"
+    if [ -f "$LIST_FILE" ]; then
+        backup_file "$LIST_FILE"
+        normalize_file "$LIST_FILE"
+        # Check if hosttsiplayer already exists
+        if ! grep -xqF "hosttsiplayer" "$LIST_FILE"; then
+            echo "hosttsiplayer" >> "$LIST_FILE"
+            echo "➕ Added hosttsiplayer to list.txt" | tee -a "$LOG_FILE"
+        else
+            echo "ℹ️  hosttsiplayer already exists in list.txt" | tee -a "$LOG_FILE"
+        fi
+        sort_list_file "$LIST_FILE"
+        echo "✅ list.txt updated for TSiPlayer" | tee -a "$LOG_FILE"
+    else
+        echo "⚠️  list.txt not found" | tee -a "$LOG_FILE"
+    fi
+    # Cleanup TSiPlayer temp file
+    rm -f "$TSI_TAR_FILE"
+    echo "✅ TSiPlayer installation completed successfully" | tee -a "$LOG_FILE"
+}
+# ===========================================================
+# Update TSiPlayer Hosts
+# ===========================================================
+update_tsiplayer_hosts() {
+    echo ""
+    echo "🔄 Updating TSiPlayer hosts..." | tee -a "$LOG_FILE"
+    # Create TSiPlayer directory if it doesn't exist
+    if [ ! -d "$TSI_DEST_DIR" ]; then
+        echo "📁 Creating TSiPlayer directory..." | tee -a "$LOG_FILE"
+        mkdir -p "$TSI_DEST_DIR"
+    fi
+    echo "> Removing any previous temporary folder..." | tee -a "$LOG_FILE"
+    rm -rf "$TSI_TMP_DIR"
+    mkdir -p "$TSI_TMP_DIR"
+    echo "> Downloading latest TSiPlayer hosts from GitHub..." | tee -a "$LOG_FILE"
+    wget -q --no-check-certificate "$TSI_HOSTS_REPO_URL" -O "$TSI_TMP_DIR/main.zip"
+    if [ ! -f "$TSI_TMP_DIR/main.zip" ]; then
+        echo "!! Failed to download the TSiPlayer hosts zip file. Check internet connection or URL." | tee -a "$LOG_FILE"
+        return 1
+    fi
+    echo "> Extracting new TSiPlayer host files to $TSI_DEST_DIR ..." | tee -a "$LOG_FILE"
+    unzip -q "$TSI_TMP_DIR/main.zip" -d "$TSI_TMP_DIR"
+    # Backup and replace host_*.py files
+    TSI_UPDATED_FILES=""
+    TSI_UPDATED_COUNT=0
+    for file in "$TSI_TMP_DIR"/My-tsiplayer-main/host_*.py; do
+        [ -f "$file" ] || continue
+        filename=$(basename "$file")
+        destfile="$TSI_DEST_DIR/$filename"
+        echo "🔍 Processing TSiPlayer host: $filename" | tee -a "$LOG_FILE"
+        # Delete old .bak versions (keep only today's backup)
+        find "$TSI_DEST_DIR" -maxdepth 1 -type f -name "$filename.*.bak" ! -name "$filename.$DATE.bak" -exec rm -f {} \; 2>/dev/null
+        # Backup current version if exists
+        if [ -f "$destfile" ]; then
+            echo "📦 Backing up $filename to $filename.$DATE.bak" | tee -a "$LOG_FILE"
+            cp -f "$destfile" "$destfile.$DATE.bak"
+        fi
+        # Install new file
+        echo "📥 Installing $filename" | tee -a "$LOG_FILE"
+        cp -f "$file" "$TSI_DEST_DIR/"
+        TSI_UPDATED_COUNT=$((TSI_UPDATED_COUNT+1))
+        TSI_UPDATED_FILES="$TSI_UPDATED_FILES\n$filename"
+    done
+    # Clean up temporary files
+    rm -rf "$TSI_TMP_DIR"
+    echo "✅ TSiPlayer temporary files cleaned up." | tee -a "$LOG_FILE"
+    if [ $TSI_UPDATED_COUNT -gt 0 ]; then
+        echo "✅ TSiPlayer hosts update completed: $TSI_UPDATED_COUNT file(s) updated" | tee -a "$LOG_FILE"
+        echo -e "📋 Updated TSiPlayer files:$TSI_UPDATED_FILES" | tee -a "$LOG_FILE"
+    else
+        echo "ℹ️  No TSiPlayer host files found to update" | tee -a "$LOG_FILE"
+    fi
     return 0
 }
 # ===========================================================
@@ -454,11 +573,16 @@ cleanup_temp_files() {
     rm -f "/tmp/new_hosts_$$.txt" 2>/dev/null
     rm -f "/tmp/host_info_$$.txt" 2>/dev/null
     rm -f "$TAR_FILE" 2>/dev/null
+    rm -f "$TSI_TAR_FILE" 2>/dev/null
     # Clean old temporary directories
     find /tmp -name "e2i_extract_*" -type d -mmin +60 2>/dev/null | while read -r temp_dir; do
         echo "  🗑️ Deleting old temp directory: $(basename "$temp_dir")" | tee -a "$LOG_FILE"
         rm -rf "$temp_dir"
     done
+    # Clean TSiPlayer temporary directory
+    if [ -d "$TSI_TMP_DIR" ]; then
+        rm -rf "$TSI_TMP_DIR"
+    fi
 }
 # ===========================================================
 # Main Execution
@@ -475,20 +599,24 @@ main() {
     # ===========================================================
     # Detect E2iPlayer version and check compatibility
     # ===========================================================
-	# if detect_e2iplayer_version; then
-		# show_oe_mirrors_instructions
-		# exit 1
-	# fi
-	detect_e2iplayer_version
-	IS_OE_MIRRORS=$?
-	if [ $IS_OE_MIRRORS -eq 0 ]; then
-		show_oe_mirrors_instructions
-		exit 1
-	fi
+    detect_e2iplayer_version
+    IS_OE_MIRRORS=$?
+    if [ $IS_OE_MIRRORS -eq 0 ]; then
+        show_oe_mirrors_instructions
+        exit 1
+    fi
     echo "✅ Compatible version detected: $TEAM" | tee -a "$LOG_FILE"
     sleep 1
     # Clean old temporary files before starting
     cleanup_temp_files
+    # ===========================================================
+    # Install TSiPlayer host
+    # ===========================================================
+    install_tsiplayer
+    # ===========================================================
+    # Update TSiPlayer hosts
+    # ===========================================================
+    update_tsiplayer_hosts
     # ===========================================================
     # Download tar.gz directly
     # ===========================================================
@@ -549,9 +677,11 @@ main() {
     echo "** 📝 Text Updates: +$NEW_ALIASES aliases" | tee -a "$LOG_FILE"
     echo "**                 +$NEW_LIST_ENTRIES list entries" | tee -a "$LOG_FILE"
     echo "**                 +$NEW_HOSTGROUPS hostgroups" | tee -a "$LOG_FILE"
+    echo "** 🔧 TSiPlayer: Installed and configured" | tee -a "$LOG_FILE"
+    echo "** 🔄 TSiPlayer Hosts: $TSI_UPDATED_COUNT file(s) updated" | tee -a "$LOG_FILE"
     echo "** 🧹 Cleanup: All temp files removed" | tee -a "$LOG_FILE"
     echo '************************************************************'
-    echo "$(date): $NEW_HOSTS_COUNT hosts needed updates, +$NEW_ALIASES aliases, +$NEW_LIST_ENTRIES list, +$NEW_HOSTGROUPS groups" >> "$LOG_FILE"
+    echo "$(date): $NEW_HOSTS_COUNT hosts needed updates, +$NEW_ALIASES aliases, +$NEW_LIST_ENTRIES list, +$NEW_HOSTGROUPS groups, TSiPlayer: $TSI_UPDATED_COUNT hosts updated" >> "$LOG_FILE"
     sleep 3
     echo ""
     echo "🔄 Restarting Enigma2..." | tee -a "$LOG_FILE"
