@@ -77,7 +77,6 @@ check_plugin_installation() {
     echo "🔹 Method 3: For OpenPLi images" | tee -a "$LOG_FILE"
     echo "   opkg update && opkg install enigma2-plugin-extensions-iptvplayer" | tee -a "$LOG_FILE"
     echo "" | tee -a "$LOG_FILE"
-    # ======== بداية التعديل ========
     # Add auto-installation option with countdown
     echo "🔘 سيتم تثبيت OE-MIRRORS تلقائياً بعد العد التنازلي"
     echo "🔘 OE-MIRRORS will be automatically installed after countdown"
@@ -101,14 +100,13 @@ check_plugin_installation() {
     else
         # Running via pipe - perform automatic installation with a simple countdown
         for i in 10 9 8 7 6 5 4 3 2 1; do
-            echo -ne "\r⏳ Auto-installing in $i seconds..."
+            echo -ne "\r⏳ جاري التثبيت التلقائي خلال $i ثوانٍ... (Auto-installing in $i seconds...)"
             sleep 1
         done
         echo ""
-        echo "⚠️  Auto-installing OE-MIRRORS version..."
+        echo "⚠️  جاري التثبيت التلقائي... (Auto-installing OE-MIRRORS version...)"
         choice="1"
     fi
-    # ======== نهاية التعديل ========
     if [ "$choice" = "1" ]; then
         echo "✅ جاري تثبيت النسخة الرسمية OE-MIRRORS..."
         echo "✅ Installing the official OE-MIRRORS version..."
@@ -336,7 +334,7 @@ show_oe_mirrors_instructions() {
     if [ -t 0 ]; then
         # Interactive mode - show countdown with option to cancel
         for i in 10 9 8 7 6 5 4 3 2 1; do
-            echo -ne "\r⏳ جاري التثبيت التلقائي خلال $i ثوانٍ... اضغط أي مفتاح رقم أو حرف للإلغاء. "
+            echo -ne "\r⏳ جاري التثبيت التلقائي خلال $i ثوانٍ... اضغط أي مفتاح للإلغاء. "
             # Check for key press with a 1-second timeout
             if read -t 1 -n 1 key 2>/dev/null; then
                 echo ""
@@ -349,11 +347,11 @@ show_oe_mirrors_instructions() {
     else
         # Running via pipe - perform automatic installation with a simple countdown
         for i in 10 9 8 7 6 5 4 3 2 1; do
-            echo -ne "\r⏳ Auto-installing in $i seconds..."
+            echo -ne "\r⏳ جاري التثبيت التلقائي خلال $i ثوانٍ... (Auto-installing in $i seconds...)"
             sleep 1
         done
         echo ""
-        echo "⚠️  Auto-installing OE-MIRRORS version..."
+        echo "⚠️  جاري التثبيت التلقائي... (Auto-installing OE-MIRRORS version...)"
         choice="1"
     fi
     if [ "$choice" = "1" ]; then
