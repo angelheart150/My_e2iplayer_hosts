@@ -1,7 +1,7 @@
 #!/bin/sh
 ##############################################################
 # E2IPlayer Hosts Auto Updater by Mohamed Elsafty
-# Version: 4.5 (With TSiPlayer Installation and Hosts Update)
+# Version: 4.6 (With TSiPlayer Installation and Hosts Update)
 ##############################################################
 #setup command=wget -q "--no-check-certificate" https://github.com/angelheart150/My_e2iplayer_hosts/raw/main/install-e2iplayer-update-hosts.sh -O - | /bin/sh
 ##############################################################
@@ -37,80 +37,104 @@ TSI_UPDATED_COUNT=0
 # ===========================================================
 check_plugin_installation() {
     echo "🔍 Checking E2iPlayer plugin installation..." | tee -a "$LOG_FILE"
+    # Check if the plugin is correctly installed
+    if [ -d "$DEST_DIR" ] && ([ -f "$DEST_DIR/__init__.py" ] || [ -f "$DEST_DIR/version.py" ]); then
+        echo "✅ E2iPlayer plugin is installed" | tee -a "$LOG_FILE"
+        return 0
+    fi
+    # If we reach here, the plugin is NOT installed correctly.
+    # Determine the reason and show the appropriate message.
     if [ ! -d "$DEST_DIR" ]; then
         echo "❌ E2iPlayer plugin is not installed!" | tee -a "$LOG_FILE"
         echo "   Directory not found: $DEST_DIR" | tee -a "$LOG_FILE"
-        echo "" | tee -a "$LOG_FILE"
-        echo "📦 Please install E2iPlayer first using one of these methods:" | tee -a "$LOG_FILE"
-        echo "=========================================" | tee -a "$LOG_FILE"
-        echo "" | tee -a "$LOG_FILE"
-        echo "🔹 Method 1: Install from plugin repository" | tee -a "$LOG_FILE"
-        echo "   - Go to Enigma2 menu" | tee -a "$LOG_FILE"
-        echo "   - Plugins → Download plugins" | tee -a "$LOG_FILE"
-        echo "   - Find and install IPTVPlayer" | tee -a "$LOG_FILE"
-        echo "" | tee -a "$LOG_FILE"
-        echo "🔹 Method 2: Manual installation (OE-MIRRORS version)" | tee -a "$LOG_FILE"
-        echo "   Run this command:" | tee -a "$LOG_FILE"
-        echo "   -----------------------------------------" | tee -a "$LOG_FILE"
-        echo "   wget --no-check-certificate \\" | tee -a "$LOG_FILE"
-        echo "   \"https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip\" \\" | tee -a "$LOG_FILE"
-        echo "   -O /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
-        echo "   unzip /tmp/e2iplayer-python3.zip -d /tmp/ && \\" | tee -a "$LOG_FILE"
-        echo "   cp -rf /tmp/e2iplayer-python3/IPTVPlayer \\" | tee -a "$LOG_FILE"
-        echo "   /usr/lib/enigma2/python/Plugins/Extensions && \\" | tee -a "$LOG_FILE"
-        echo "   rm -f /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
-        echo "   rm -fr /tmp/e2iplayer-python3" | tee -a "$LOG_FILE"
-        echo "   -----------------------------------------" | tee -a "$LOG_FILE"
-        echo "" | tee -a "$LOG_FILE"
-        echo "🔹 Method 3: For OpenPLi images" | tee -a "$LOG_FILE"
-        echo "   opkg update && opkg install enigma2-plugin-extensions-iptvplayer" | tee -a "$LOG_FILE"
-        echo "" | tee -a "$LOG_FILE"
-        # Add auto-installation option
-        echo "🔘 اضغط 1 للتثبيت التلقائي الآن أو 2 للخروج."
-        echo "🔘 Press 1 for auto-installation now or 2 to exit."
-        # Check if the script is running interactively
-        if [ -t 0 ]; then
-            # Interactive mode
-            read -n1 choice < /dev/tty
-            echo ""
-        else
-            # Running via pipe - perform automatic installation
-            echo "⚠️  Auto-installing OE-MIRRORS version..."
-            choice="1"
-        fi
-        if [ "$choice" = "1" ]; then
-            echo "✅ جاري تثبيت النسخة الرسمية OE-MIRRORS..."
-            echo "✅ Installing the official OE-MIRRORS version..."
-            wget --no-check-certificate "https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip" -O /tmp/e2iplayer-python3.zip
-            if [ $? -ne 0 ]; then
-                echo "❌ Failed to download file"
+    else
+        echo "⚠️  E2iPlayer directory exists but is incomplete or corrupted." | tee -a "$LOG_FILE"
+        echo "   Missing essential files in: $DEST_DIR" | tee -a "$LOG_FILE"
+        echo "   The plugin needs to be (re)installed." | tee -a "$LOG_FILE"
+    fi
+    echo "" | tee -a "$LOG_FILE"
+    echo "📦 Please install E2iPlayer first using one of these methods:" | tee -a "$LOG_FILE"
+    echo "=========================================" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    echo "🔹 Method 1: Install from plugin repository" | tee -a "$LOG_FILE"
+    echo "   - Go to Enigma2 menu" | tee -a "$LOG_FILE"
+    echo "   - Plugins → Download plugins" | tee -a "$LOG_FILE"
+    echo "   - Find and install IPTVPlayer" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    echo "🔹 Method 2: Manual installation (OE-MIRRORS version)" | tee -a "$LOG_FILE"
+    echo "   Run this command:" | tee -a "$LOG_FILE"
+    echo "   -----------------------------------------" | tee -a "$LOG_FILE"
+    echo "   wget --no-check-certificate \\" | tee -a "$LOG_FILE"
+    echo "   \"https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip\" \\" | tee -a "$LOG_FILE"
+    echo "   -O /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
+    echo "   unzip /tmp/e2iplayer-python3.zip -d /tmp/ && \\" | tee -a "$LOG_FILE"
+    echo "   cp -rf /tmp/e2iplayer-python3/IPTVPlayer \\" | tee -a "$LOG_FILE"
+    echo "   /usr/lib/enigma2/python/Plugins/Extensions && \\" | tee -a "$LOG_FILE"
+    echo "   rm -f /tmp/e2iplayer-python3.zip && \\" | tee -a "$LOG_FILE"
+    echo "   rm -fr /tmp/e2iplayer-python3" | tee -a "$LOG_FILE"
+    echo "   -----------------------------------------" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    echo "🔹 Method 3: For OpenPLi images" | tee -a "$LOG_FILE"
+    echo "   opkg update && opkg install enigma2-plugin-extensions-iptvplayer" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    # ======== بداية التعديل ========
+    # Add auto-installation option with countdown
+    echo "🔘 سيتم تثبيت OE-MIRRORS تلقائياً بعد العد التنازلي"
+    echo "🔘 OE-MIRRORS will be automatically installed after countdown"
+    echo ""
+    echo "⏳ Starting 10-second countdown..."
+    choice="0" # Initialize choice to 0
+    # Check if the script is running interactively
+    if [ -t 0 ]; then
+        # Interactive mode - show countdown with option to cancel
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            echo -ne "\r⏳ جاري التثبيت التلقائي خلال $i ثوانٍ... اضغط أي مفتاح للإلغاء. "
+            # Check for key press with a 1-second timeout
+            if read -t 1 -n 1 key 2>/dev/null; then
+                echo ""
+                echo "❌ تم إلغاء التثبيت من قبل المستخدم."
                 exit 1
             fi
-            unzip -o /tmp/e2iplayer-python3.zip -d /tmp/
-            if [ $? -ne 0 ]; then
-                echo "❌ Failed to extract file"
-                exit 1
-            fi
-            cp -rf /tmp/e2iplayer-python3/IPTVPlayer /usr/lib/enigma2/python/Plugins/Extensions
-            rm -f /tmp/e2iplayer-python3.zip
-            rm -fr /tmp/e2iplayer-python3
-            echo "✅ تم تثبيت الإضافة بنجاح، جاري متابعة تحديث الـ Hosts..."
-            echo "✅ Plugin installed successfully, continuing with hosts update..."
-            return 0
-        else
-            echo "❌ Operation cancelled تم الإلغاء."
+        done
+        echo "" # Move to a new line after the countdown
+        choice="1" # If loop finishes, proceed with installation
+    else
+        # Running via pipe - perform automatic installation with a simple countdown
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            echo -ne "\r⏳ Auto-installing in $i seconds..."
+            sleep 1
+        done
+        echo ""
+        echo "⚠️  Auto-installing OE-MIRRORS version..."
+        choice="1"
+    fi
+    # ======== نهاية التعديل ========
+    if [ "$choice" = "1" ]; then
+        echo "✅ جاري تثبيت النسخة الرسمية OE-MIRRORS..."
+        echo "✅ Installing the official OE-MIRRORS version..."
+        # Remove the old/corrupted directory first to ensure a clean install
+        rm -rf "$DEST_DIR"
+        wget --no-check-certificate "https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip" -O /tmp/e2iplayer-python3.zip
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to download file"
             exit 1
         fi
+        unzip -o /tmp/e2iplayer-python3.zip -d /tmp/
+        if [ $? -ne 0 ]; then
+            echo "❌ Failed to extract file"
+            exit 1
+        fi
+        cp -rf /tmp/e2iplayer-python3/IPTVPlayer /usr/lib/enigma2/python/Plugins/Extensions
+        rm -f /tmp/e2iplayer-python3.zip
+        rm -fr /tmp/e2iplayer-python3
+        echo "✅ تم تثبيت الإضافة بنجاح، جاري متابعة تحديث الـ Hosts..."
+        echo "✅ Plugin installed successfully, continuing with hosts update..."
+        return 0
+    else
+        # This part is now less likely to be reached, but kept for safety
+        echo "❌ Operation cancelled تم الإلغاء."
+        exit 1
     fi
-    # Check if basic plugin structure exists
-    if [ ! -f "$DEST_DIR/__init__.py" ] && [ ! -f "$DEST_DIR/version.py" ]; then
-        echo "⚠️  E2iPlayer directory exists but seems incomplete" | tee -a "$LOG_FILE"
-        echo "   Missing essential files in: $DEST_DIR" | tee -a "$LOG_FILE"
-        echo "   The plugin may not be installed correctly." | tee -a "$LOG_FILE"
-        return 1
-    fi
-    echo "✅ E2iPlayer plugin is installed" | tee -a "$LOG_FILE"
-    return 0
 }
 # ===========================================================
 # Install TSiPlayer Host
@@ -303,13 +327,40 @@ show_oe_mirrors_instructions() {
     echo "rm -fr /tmp/e2iplayer-python3" | tee -a "$LOG_FILE"
     echo "-------------------------------------------------" | tee -a "$LOG_FILE"
     echo ""
-    echo "🔘 اضغط 1 لتنفيذ الأمر الآن ثم نفذ التشعيل لتثبيت الاضافات أو 2 للخروج."
-    echo "🔘 Press 1 to execute the installation now and restart to finish, or 2 to exit."
-    read -n1 choice < /dev/tty
+    echo "🔘 سيتم تثبيت OE-MIRRORS تلقائياً بعد العد التنازلي"
+    echo "🔘 OE-MIRRORS will be automatically installed after countdown"
     echo ""
+    echo "⏳ Starting 10-second countdown..."
+    choice="0" # Initialize choice
+    # Check if the script is running interactively
+    if [ -t 0 ]; then
+        # Interactive mode - show countdown with option to cancel
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            echo -ne "\r⏳ جاري التثبيت التلقائي خلال $i ثوانٍ... اضغط أي مفتاح رقم أو حرف للإلغاء. "
+            # Check for key press with a 1-second timeout
+            if read -t 1 -n 1 key 2>/dev/null; then
+                echo ""
+                echo "❌ تم إلغاء التثبيت من قبل المستخدم."
+                exit 1
+            fi
+        done
+        echo "" # Move to a new line after the countdown
+        choice="1" # If loop finishes, proceed with installation
+    else
+        # Running via pipe - perform automatic installation with a simple countdown
+        for i in 10 9 8 7 6 5 4 3 2 1; do
+            echo -ne "\r⏳ Auto-installing in $i seconds..."
+            sleep 1
+        done
+        echo ""
+        echo "⚠️  Auto-installing OE-MIRRORS version..."
+        choice="1"
+    fi
     if [ "$choice" = "1" ]; then
         echo "✅ جاري تثبيت النسخة الرسمية OE-MIRRORS..."
         echo "✅ Installing the official OE-MIRRORS version..."
+        # Remove the old/incompatible directory first
+        rm -rf "$DEST_DIR"
         wget --no-check-certificate "https://github.com/oe-mirrors/e2iplayer/archive/refs/heads/python3.zip" -O /tmp/e2iplayer-python3.zip
         if [ $? -ne 0 ]; then
             echo "❌ Failed to download file"
@@ -328,6 +379,7 @@ show_oe_mirrors_instructions() {
         sleep 3
         killall -9 enigma2
     else
+        # This part is now less likely to be reached, but kept for safety
         echo "❌ Operation cancelled تم الإلغاء."
         exit 1
     fi
